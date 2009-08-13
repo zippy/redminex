@@ -27,7 +27,7 @@ class AdminController < ApplicationController
 	
   def projects
     sort_init 'name', 'asc'
-    sort_update
+    sort_update %w(name is_public created_on)
     
     @status = params[:status] ? params[:status].to_i : 1
     c = ARCondition.new(@status == 0 ? "status <> 0" : ["status = ?", @status])
@@ -86,6 +86,7 @@ class AdminController < ApplicationController
     @flags = {
       :default_admin_changed => User.find(:first, :conditions => ["login=? and hashed_password=?", 'admin', User.hash_password('admin')]).nil?,
       :file_repository_writable => File.writable?(Attachment.storage_path),
+      :plugin_assets_writable => File.writable?(Engines.public_directory),
       :rmagick_available => Object.const_defined?(:Magick)
     }
   end  

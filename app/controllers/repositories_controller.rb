@@ -51,8 +51,9 @@ class RepositoriesController < ApplicationController
     @users += User.find_all_by_id(additional_user_ids) unless additional_user_ids.empty?
     @users.compact!
     @users.sort!
-    if request.post?
-      @repository.committer_ids = params[:committers]
+    if request.post? && params[:committers].is_a?(Hash)
+      # Build a hash with repository usernames as keys and corresponding user ids as values
+      @repository.committer_ids = params[:committers].values.inject({}) {|h, c| h[c.first] = c.last; h}
       flash[:notice] = l(:notice_successful_update)
       redirect_to :action => 'committers', :id => @project
     end
@@ -126,6 +127,9 @@ class RepositoriesController < ApplicationController
   end
   
   def annotate
+    @entry = @repository.entry(@path, @rev)
+    show_error_not_found and return unless @entry
+    
     @annotate = @repository.scm.annotate(@path, @rev)
     render_error l(:error_scm_annotate) and return if @annotate.nil? || @annotate.empty?
   end

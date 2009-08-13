@@ -33,8 +33,6 @@ class ProjectsController < ApplicationController
   include SortHelper
   helper :custom_fields
   include CustomFieldsHelper   
-  helper :ifpdf
-  include IfpdfHelper
   helper :issues
   helper IssuesHelper
   helper :queries
@@ -84,6 +82,11 @@ class ProjectsController < ApplicationController
 	
   # Show @project
   def show
+    if params[:jump]
+      # try to redirect to the requested menu item
+      redirect_to_project_menu_item(@project, params[:jump]) && return
+    end
+    
     @members_by_role = @project.members.find(:all, :include => [:user, :role], :order => 'position').group_by {|m| m.role}
     @subprojects = @project.children.find(:all, :conditions => Project.visible_by(User.current))
     @news = @project.news.find(:all, :limit => 5, :include => [ :author, :project ], :order => "#{News.table_name}.created_on DESC")
@@ -188,18 +191,26 @@ class ProjectsController < ApplicationController
 
   def add_file
     if request.post?
-      @version = @project.versions.find_by_id(params[:version_id])
-      attachments = attach_files(@version, params[:attachments])
-      Mailer.deliver_attachments_added(attachments) if !attachments.empty? && Setting.notified_events.include?('file_added')
+      container = (params[:version_id].blank? ? @project : @project.versions.find_by_id(params[:version_id]))
+      attachments = attach_files(container, params[:attachments])
+      if !attachments.empty? && Setting.notified_events.include?('file_added')
+        Mailer.deliver_attachments_added(attachments)
+      end
       redirect_to :controller => 'projects', :action => 'list_files', :id => @project
+      return
     end
     @versions = @project.versions.sort
   end
   
   def list_files
-    sort_init "#{Attachment.table_name}.filename", "asc"
-    sort_update
-    @versions = @project.versions.find(:all, :include => :attachments, :order => sort_clause).sort.reverse
+    sort_init 'filename', 'asc'
+    sort_update 'filename' => "#{Attachment.table_name}.filename",
+                'created_on' => "#{Attachment.table_name}.created_on",
+                'size' => "#{Attachment.table_name}.filesize",
+                'downloads' => "#{Attachment.table_name}.downloads"
+                
+    @containers = [ Project.find(@project.id, :include => :attachments, :order => sort_clause)]
+    @containers += @project.versions.find(:all, :include => :attachments, :order => sort_clause).sort.reverse
     render :layout => !request.xhr?
   end
   

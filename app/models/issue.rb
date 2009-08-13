@@ -26,13 +26,13 @@ class Issue < ActiveRecord::Base
   belongs_to :category, :class_name => 'IssueCategory', :foreign_key => 'category_id'
 
   has_many :journals, :as => :journalized, :dependent => :destroy
-  has_many :attachments, :as => :container, :dependent => :destroy
   has_many :time_entries, :dependent => :delete_all
   has_and_belongs_to_many :changesets, :order => "#{Changeset.table_name}.committed_on ASC, #{Changeset.table_name}.id ASC"
   
   has_many :relations_from, :class_name => 'IssueRelation', :foreign_key => 'issue_from_id', :dependent => :delete_all
   has_many :relations_to, :class_name => 'IssueRelation', :foreign_key => 'issue_to_id', :dependent => :delete_all
   
+  acts_as_attachable :after_remove => :attachment_removed
   acts_as_customizable
   acts_as_watchable
   acts_as_searchable :columns => ['subject', "#{table_name}.description", "#{Journal.table_name}.notes"],
@@ -45,7 +45,7 @@ class Issue < ActiveRecord::Base
   acts_as_activity_provider :find_options => {:include => [:project, :author, :tracker]},
                             :author_key => :author_id
   
-  validates_presence_of :subject, :description, :priority, :project, :tracker, :author, :status
+  validates_presence_of :subject, :priority, :project, :tracker, :author, :status
   validates_length_of :subject, :maximum => 255
   validates_inclusion_of :done_ratio, :in => 0..100
   validates_numericality_of :estimated_hours, :allow_nil => true
@@ -195,6 +195,11 @@ class Issue < ActiveRecord::Base
     self.status.is_closed?
   end
   
+  # Returns true if the issue is overdue
+  def overdue?
+    !due_date.nil? && (due_date < Date.today)
+  end
+  
   # Users the issue can be assigned to
   def assignable_users
     project.assignable_users
@@ -260,5 +265,16 @@ class Issue < ActiveRecord::Base
   
   def to_s
     "#{tracker} ##{id}: #{subject}"
+  end
+  
+  private
+  
+  # Callback on attachment deletion
+  def attachment_removed(obj)
+    journal = init_journal(User.current)
+    journal.details << JournalDetail.new(:property => 'attachment',
+                                         :prop_key => obj.id,
+                                         :old_value => obj.filename)
+    journal.save
   end
 end

@@ -632,7 +632,7 @@ setting_autofetch_changesets: Automatyczne pobieranie zmian
 setting_autologin: Auto logowanie
 setting_bcc_recipients: Odbiorcy kopii tajnej (kt/bcc)
 setting_commit_fix_keywords: Słowa zmieniające status
-setting_commit_logs_encoding: Zatwierdź kodowanie wiadomości
+setting_commit_logs_encoding: Kodowanie komentarzy zatwierdzeń
 setting_commit_ref_keywords: Słowa tworzące powiązania
 setting_cross_project_issue_relations: Zezwól na powiązania zagadnień między projektami
 setting_date_format: Format daty
@@ -712,6 +712,9 @@ text_wiki_destroy_confirmation: Jesteś pewien, że chcesz usunąć to wiki i ca
 text_workflow_edit: Zaznacz rolę i typ zagadnienia do edycji przepływu
 
 label_user_activity: "Aktywność: %s"
-label_updated_time_by: Updated by %s %s ago
-text_diff_truncated: '... This diff was truncated because it exceeds the maximum size that can be displayed.'
-setting_diff_max_lines_displayed: Max number of diff lines displayed
+label_updated_time_by: Uaktualnione przez %s %s temu
+text_diff_truncated: '... Ten plik różnic został przycięty ponieważ jest zbyt długi.'
+setting_diff_max_lines_displayed: Maksymalna liczba linii różnicy do pokazania
+text_plugin_assets_writable: Plugin assets directory writable
+warning_attachments_not_saved: "%d file(s) could not be saved."
+button_create_and_continue: Create and continue

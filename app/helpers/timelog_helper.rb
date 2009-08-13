@@ -16,6 +16,8 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 module TimelogHelper
+  include ApplicationHelper
+  
   def render_timelog_breadcrumb
     links = []
     links << link_to(l(:label_project_all), {:project_id => nil, :issue_id => nil})
@@ -33,7 +35,11 @@ module TimelogHelper
   end
   
   def select_hours(data, criteria, value)
-    data.select {|row| row[criteria] == value}
+  	if value.to_s.empty?
+  		data.select {|row| row[criteria].blank? }
+    else 
+    	data.select {|row| row[criteria] == value}
+    end
   end
   
   def sum_hours(data)
@@ -81,7 +87,7 @@ module TimelogHelper
       csv << headers.collect {|c| begin; ic.iconv(c.to_s); rescue; c.to_s; end }
       # csv lines
       entries.each do |entry|
-        fields = [l_date(entry.spent_on),
+        fields = [format_date(entry.spent_on),
                   entry.user,
                   entry.activity,
                   entry.project,

@@ -223,6 +223,7 @@ setting_mail_handler_api_enabled: Abruf eingehender E-Mails aktivieren
 setting_mail_handler_api_key: API-Schlüssel
 setting_sequential_project_identifiers: Fortlaufende Projektkennungen generieren
 setting_gravatar_enabled: Gravatar Benutzerbilder benutzen
+setting_diff_max_lines_displayed: Maximale Anzahl anzuzeigender Diff-Zeilen
 
 permission_edit_project: Projekt bearbeiten
 permission_select_project_modules: Projektmodule auswählen
@@ -344,6 +345,7 @@ label_last_updates_plural: %d zuletzt aktualisierten
 label_registered_on: Angemeldet am
 label_activity: Aktivität
 label_overall_activity: Aktivität aller Projekte anzeigen
+label_user_activity: "Aktivität von %s"
 label_new: Neu
 label_logged_as: Angemeldet als
 label_environment: Environment
@@ -543,6 +545,7 @@ label_send_test_email: Test-E-Mail senden
 label_feeds_access_key_created_on: Atom-Zugriffsschlüssel vor %s erstellt
 label_module_plural: Module
 label_added_time_by: Von %s vor %s hinzugefügt
+label_updated_time_by: Von %s vor %s aktualisiert
 label_updated_time: Vor %s aktualisiert
 label_jump_to_a_project: Zu einem Projekt springen...
 label_file_plural: Dateien
@@ -668,6 +671,7 @@ text_enumeration_destroy_question: '%d Objekte sind diesem Wert zugeordnet.'
 text_enumeration_category_reassign_to: 'Die Objekte stattdessen diesem Wert zuordnen:'
 text_email_delivery_not_configured: "Der SMTP-Server ist nicht konfiguriert und Mailbenachrichtigungen sind ausgeschaltet.\nNehmen Sie die Einstellungen für Ihren SMTP-Server in config/email.yml vor und starten Sie die Applikation neu."
 text_repository_usernames_mapping: "Bitte legen Sie die Zuordnung der Redmine-Benutzer zu den Benutzernamen der Commit-Log-Meldungen des Projektarchivs fest.\nBenutzer mit identischen Redmine- und Projektarchiv-Benutzernamen oder -E-Mail-Adressen werden automatisch zugeordnet."
+text_diff_truncated: '... Dieser Diff wurde abgeschnitten, weil er die maximale Anzahl anzuzeigender Zeilen überschreitet.'
 
 default_role_manager: Manager
 default_role_developper: Entwickler
@@ -694,7 +698,6 @@ default_activity_development: Entwicklung
 enumeration_issue_priorities: Ticket-Prioritäten
 enumeration_doc_categories: Dokumentenkategorien
 enumeration_activities: Aktivitäten (Zeiterfassung)
-label_user_activity: "%s's activity"
-label_updated_time_by: Updated by %s %s ago
-text_diff_truncated: '... This diff was truncated because it exceeds the maximum size that can be displayed.'
-setting_diff_max_lines_displayed: Max number of diff lines displayed
+text_plugin_assets_writable: Plugin assets directory writable
+warning_attachments_not_saved: "%d file(s) could not be saved."
+button_create_and_continue: Create and continue

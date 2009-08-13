@@ -51,6 +51,8 @@ class IssuesControllerTest < Test::Unit::TestCase
   end
 
   def test_index
+    Setting.default_language = 'en'
+    
     get :index
     assert_response :success
     assert_template 'index.rhtml'
@@ -61,6 +63,8 @@ class IssuesControllerTest < Test::Unit::TestCase
     # private projects hidden
     assert_no_tag :tag => 'a', :content => /Issue of a private subproject/
     assert_no_tag :tag => 'a', :content => /Issue on project 2/
+    # project column
+    assert_tag :tag => 'th', :content => /Project/
   end
   
   def test_index_should_not_list_issues_when_module_disabled
@@ -137,6 +141,16 @@ class IssuesControllerTest < Test::Unit::TestCase
     assert_not_nil assigns(:issues)
     assert_equal 'application/pdf', @response.content_type
   end
+  
+  def test_index_sort
+    get :index, :sort_key => 'tracker'
+    assert_response :success
+    
+    sort_params = @request.session['issuesindex_sort']
+    assert sort_params.is_a?(Hash)
+    assert_equal 'tracker', sort_params[:key]
+    assert_equal 'ASC', sort_params[:order]
+  end
 
   def test_gantt
     get :gantt, :project_id => 1
@@ -167,16 +181,16 @@ class IssuesControllerTest < Test::Unit::TestCase
   def test_gantt_export_to_pdf
     get :gantt, :project_id => 1, :format => 'pdf'
     assert_response :success
-    assert_template 'gantt.rfpdf'
     assert_equal 'application/pdf', @response.content_type
+    assert @response.body.starts_with?('%PDF')
     assert_not_nil assigns(:gantt)
   end
 
   def test_cross_project_gantt_export_to_pdf
     get :gantt, :format => 'pdf'
     assert_response :success
-    assert_template 'gantt.rfpdf'
     assert_equal 'application/pdf', @response.content_type
+    assert @response.body.starts_with?('%PDF')
     assert_not_nil assigns(:gantt)
   end
   
@@ -242,6 +256,14 @@ class IssuesControllerTest < Test::Unit::TestCase
                                             :content => /Notes/ } }
   end
 
+  def test_show_export_to_pdf
+    get :show, :id => 3, :format => 'pdf'
+    assert_response :success
+    assert_equal 'application/pdf', @response.content_type
+    assert @response.body.starts_with?('%PDF')
+    assert_not_nil assigns(:issue)
+  end
+
   def test_get_new
     @request.session[:user_id] = 2
     get :new, :project_id => 1, :tracker_id => 1
@@ -295,6 +317,16 @@ class IssuesControllerTest < Test::Unit::TestCase
     assert_equal 'Value for field 2', v.value
   end
   
+  def test_post_new_and_continue
+    @request.session[:user_id] = 2
+    post :new, :project_id => 1, 
+               :issue => {:tracker_id => 3,
+                          :subject => 'This is first issue',
+                          :priority_id => 5},
+               :continue => ''
+    assert_redirected_to :controller => 'issues', :action => 'new', :tracker_id => 3
+  end
+  
   def test_post_new_without_custom_fields_param
     @request.session[:user_id] = 2
     post :new, :project_id => 1, 
@@ -322,20 +354,44 @@ class IssuesControllerTest < Test::Unit::TestCase
     assert_equal 'activerecord_error_invalid', issue.errors.on(:custom_values)
   end
   
+  def test_post_new_with_watchers
+    @request.session[:user_id] = 2
+    ActionMailer::Base.deliveries.clear
+    
+    assert_difference 'Watcher.count', 2 do
+      post :new, :project_id => 1, 
+                 :issue => {:tracker_id => 1,
+                            :subject => 'This is a new issue with watchers',
+                            :description => 'This is the description',
+                            :priority_id => 5,
+                            :watcher_user_ids => ['2', '3']}
+    end
+    assert_redirected_to 'issues/show'
+    
+    issue = Issue.find_by_subject('This is a new issue with watchers')
+    # Watchers added
+    assert_equal [2, 3], issue.watcher_user_ids.sort
+    assert issue.watched_by?(User.find(3))
+    # Watchers notified
+    mail = ActionMailer::Base.deliveries.last
+    assert_kind_of TMail::Mail, mail
+    assert [mail.bcc, mail.cc].flatten.include?(User.find(3).mail)
+  end
+  
   def test_post_should_preserve_fields_values_on_validation_failure
     @request.session[:user_id] = 2
     post :new, :project_id => 1, 
                :issue => {:tracker_id => 1,
-                          :subject => 'This is the test_new issue',
-                          # empty description
-                          :description => '',
+                          # empty subject
+                          :subject => '',
+                          :description => 'This is a description',
                           :priority_id => 6,
                           :custom_field_values => {'1' => 'Oracle', '2' => 'Value for field 2'}}
     assert_response :success
     assert_template 'new'
     
-    assert_tag :input, :attributes => { :name => 'issue[subject]',
-                                        :value => 'This is the test_new issue' }
+    assert_tag :textarea, :attributes => { :name => 'issue[description]' },
+                          :content => 'This is a description'
     assert_tag :select, :attributes => { :name => 'issue[priority_id]' },
                         :child => { :tag => 'option', :attributes => { :selected => 'selected',
                                                                        :value => '6' },
@@ -554,6 +610,24 @@ class IssuesControllerTest < Test::Unit::TestCase
     # No email should be sent
     assert ActionMailer::Base.deliveries.empty?
   end
+  
+  def test_post_edit_with_invalid_spent_time
+    @request.session[:user_id] = 2
+    notes = 'Note added by IssuesControllerTest#test_post_edit_with_invalid_spent_time'
+    
+    assert_no_difference('Journal.count') do
+      post :edit,
+           :id => 1,
+           :notes => notes,
+           :time_entry => {"comments"=>"", "activity_id"=>"", "hours"=>"2z"}
+    end
+    assert_response :success
+    assert_template 'edit'
+    
+    assert_tag :textarea, :attributes => { :name => 'notes' },
+                          :content => notes
+    assert_tag :input, :attributes => { :name => 'time_entry[hours]', :value => "2z" }
+  end
 
   def test_bulk_edit
     @request.session[:user_id] = 2
@@ -712,18 +786,5 @@ class IssuesControllerTest < Test::Unit::TestCase
     assert !(Issue.find_by_id(1) || Issue.find_by_id(3))
     assert_equal 2, TimeEntry.find(1).issue_id
     assert_equal 2, TimeEntry.find(2).issue_id
-  end
-  
-  def test_destroy_attachment
-    issue = Issue.find(3)
-    a = issue.attachments.size
-    @request.session[:user_id] = 2
-    post :destroy_attachment, :id => 3, :attachment_id => 1
-    assert_redirected_to 'issues/show/3'
-    assert_nil Attachment.find_by_id(1)
-    issue.reload
-    assert_equal((a-1), issue.attachments.size)
-    j = issue.journals.find(:first, :order => 'created_on DESC')
-    assert_equal 'attachment', j.details.first.property
   end
 end

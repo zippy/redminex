@@ -22,12 +22,19 @@ class Mailer < ActionMailer::Base
 
   include ActionController::UrlWriter
 
+  def self.default_url_options
+    h = Setting.host_name
+    h = h.to_s.gsub(%r{\/.*$}, '') unless Redmine::Utils.relative_url_root.blank?
+    { :host => h, :protocol => Setting.protocol }
+  end
+  
   def issue_add(issue)
     redmine_headers 'Project' => issue.project.identifier,
                     'Issue-Id' => issue.id,
                     'Issue-Author' => issue.author.login
     redmine_headers 'Issue-Assignee' => issue.assigned_to.login if issue.assigned_to
     recipients issue.recipients
+    cc(issue.watcher_recipients - @recipients)
     subject "[#{issue.project.name} - #{issue.tracker.name} ##{issue.id}] (#{issue.status.name}) #{issue.subject}"
     body :issue => issue,
          :issue_url => url_for(:controller => 'issues', :action => 'show', :id => issue)
@@ -39,6 +46,7 @@ class Mailer < ActionMailer::Base
                     'Issue-Id' => issue.id,
                     'Issue-Author' => issue.author.login
     redmine_headers 'Issue-Assignee' => issue.assigned_to.login if issue.assigned_to
+    @author = journal.user
     recipients issue.recipients
     # Watchers in cc
     cc(issue.watcher_recipients - @recipients)
@@ -57,7 +65,7 @@ class Mailer < ActionMailer::Base
     subject l(:mail_subject_reminder, issues.size)
     body :issues => issues,
          :days => days,
-         :issues_url => url_for(:controller => 'issues', :action => 'index', :set_filter => 1, :assigned_to_id => user.id, :sort_key => 'issues.due_date', :sort_order => 'asc')
+         :issues_url => url_for(:controller => 'issues', :action => 'index', :set_filter => 1, :assigned_to_id => user.id, :sort_key => 'due_date', :sort_order => 'asc')
   end
 
   def document_added(document)
@@ -73,6 +81,9 @@ class Mailer < ActionMailer::Base
     added_to = ''
     added_to_url = ''
     case container.class.name
+    when 'Project'
+      added_to_url = url_for(:controller => 'projects', :action => 'list_files', :id => container)
+      added_to = "#{l(:label_project)}: #{container}"
     when 'Version'
       added_to_url = url_for(:controller => 'projects', :action => 'list_files', :id => container.project_id)
       added_to = "#{l(:label_version)}: #{container.name}"
@@ -120,6 +131,15 @@ class Mailer < ActionMailer::Base
     subject l(:mail_subject_account_activation_request, Setting.app_title)
     body :user => user,
          :url => url_for(:controller => 'users', :action => 'index', :status => User::STATUS_REGISTERED, :sort_key => 'created_on', :sort_order => 'desc')
+  end
+
+  # A registered user's account was activated by an administrator
+  def account_activated(user)
+    set_language_if_valid user.language
+    recipients user.mail
+    subject l(:mail_subject_register, Setting.app_title)
+    body :user => user,
+         :login_url => url_for(:controller => 'account', :action => 'login')
   end
 
   def lost_password(token)
@@ -184,16 +204,12 @@ class Mailer < ActionMailer::Base
     set_language_if_valid Setting.default_language
     from Setting.mail_from
     
-    # URL options
-    h = Setting.host_name
-    h = h.to_s.gsub(%r{\/.*$}, '') unless ActionController::AbstractRequest.relative_url_root.blank?
-    default_url_options[:host] = h
-    default_url_options[:protocol] = Setting.protocol
-    
     # Common headers
     headers 'X-Mailer' => 'Redmine',
             'X-Redmine-Host' => Setting.host_name,
-            'X-Redmine-Site' => Setting.app_title
+            'X-Redmine-Site' => Setting.app_title,
+            'Precedence' => 'bulk',
+            'Auto-Submitted' => 'auto-generated'
   end
 
   # Appends a Redmine header field (name is prepended with 'X-Redmine-')
@@ -205,9 +221,10 @@ class Mailer < ActionMailer::Base
   def create_mail
     # Removes the current user from the recipients and cc
     # if he doesn't want to receive notifications about what he does
-    if User.current.pref[:no_self_notified]
-      recipients.delete(User.current.mail) if recipients
-      cc.delete(User.current.mail) if cc
+    @author ||= User.current
+    if @author.pref[:no_self_notified]
+      recipients.delete(@author.mail) if recipients
+      cc.delete(@author.mail) if cc
     end
     # Blind carbon copy recipients
     if Setting.bcc_recipients?

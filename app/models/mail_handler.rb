@@ -16,6 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 class MailHandler < ActionMailer::Base
+  include ActionView::Helpers::SanitizeHelper
 
   class UnauthorizedAction < StandardError; end
   class MissingInformation < StandardError; end
@@ -39,7 +40,7 @@ class MailHandler < ActionMailer::Base
   # Processes incoming emails
   def receive(email)
     @email = email
-    @user = User.active.find(:first, :conditions => ["LOWER(mail) = ?", email.from.first.to_s.strip.downcase])
+    @user = User.active.find(:first, :conditions => ["LOWER(mail) = ?", email.from.to_a.first.to_s.strip.downcase])
     unless @user
       # Unknown user => the email is ignored
       # TODO: ability to create the user's account
@@ -88,15 +89,21 @@ class MailHandler < ActionMailer::Base
       issue.status = status
     end
     issue.subject = email.subject.chomp.toutf8
-    issue.description = email.plain_text_body.chomp
+    issue.description = plain_text_body
+    # custom fields
+    issue.custom_field_values = issue.available_custom_fields.inject({}) do |h, c|
+      if value = get_keyword(c.name, :override => true)
+        h[c.id] = value
+      end
+      h
+    end
     issue.save!
     add_attachments(issue)
     logger.info "MailHandler: issue ##{issue.id} created by #{user}" if logger && logger.info
-    # send notification before adding watchers since they were cc'ed
-    Mailer.deliver_issue_add(issue) if Setting.notified_events.include?('issue_added')
     # add To and Cc as watchers
     add_watchers(issue)
-    
+    # send notification after adding watchers so that they can reply to Redmine
+    Mailer.deliver_issue_add(issue) if Setting.notified_events.include?('issue_added')
     issue
   end
   
@@ -120,7 +127,7 @@ class MailHandler < ActionMailer::Base
     raise UnauthorizedAction unless status.nil? || user.allowed_to?(:edit_issues, issue.project)
 
     # add the note
-    journal = issue.init_journal(user, email.plain_text_body.chomp)
+    journal = issue.init_journal(user, plain_text_body)
     add_attachments(issue)
     # check workflow
     if status && issue.new_statuses_allowed_to(user).include?(status)
@@ -155,22 +162,39 @@ class MailHandler < ActionMailer::Base
     end
   end
   
-  def get_keyword(attr)
-    if @@handler_options[:allow_override].include?(attr.to_s) && email.plain_text_body =~ /^#{attr}:[ \t]*(.+)$/i
-      $1.strip
-    elsif !@@handler_options[:issue][attr].blank?
-      @@handler_options[:issue][attr]
+  def get_keyword(attr, options={})
+    @keywords ||= {}
+    if @keywords.has_key?(attr)
+      @keywords[attr]
+    else
+      @keywords[attr] = begin
+        if (options[:override] || @@handler_options[:allow_override].include?(attr.to_s)) && plain_text_body.gsub!(/^#{attr}:[ \t]*(.+)\s*$/i, '')
+          $1.strip
+        elsif !@@handler_options[:issue][attr].blank?
+          @@handler_options[:issue][attr]
+        end
+      end
     end
   end
-end
-
-class TMail::Mail
-  # Returns body of the first plain text part found if any
+  
+  # Returns the text/plain part of the email
+  # If not found (eg. HTML-only email), returns the body with tags removed
   def plain_text_body
     return @plain_text_body unless @plain_text_body.nil?
-    p = self.parts.collect {|c| (c.respond_to?(:parts) && !c.parts.empty?) ? c.parts : c}.flatten
-    plain = p.detect {|c| c.content_type == 'text/plain'}
-    @plain_text_body = plain.nil? ? self.body : plain.body
+    parts = @email.parts.collect {|c| (c.respond_to?(:parts) && !c.parts.empty?) ? c.parts : c}.flatten
+    if parts.empty?
+      parts << @email
+    end
+    plain_text_part = parts.detect {|p| p.content_type == 'text/plain'}
+    if plain_text_part.nil?
+      # no text/plain part found, assuming html-only email
+      # strip html tags and remove doctype directive
+      @plain_text_body = strip_tags(@email.body.to_s)
+      @plain_text_body.gsub! %r{^<!DOCTYPE .*$}, ''
+    else
+      @plain_text_body = plain_text_part.body.to_s
+    end
+    @plain_text_body.strip!
+    @plain_text_body
   end
 end
-

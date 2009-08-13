@@ -144,7 +144,7 @@ class User < ActiveRecord::Base
   end
   
   def time_zone
-    @time_zone ||= (self.pref.time_zone.blank? ? nil : TimeZone[self.pref.time_zone])
+    @time_zone ||= (self.pref.time_zone.blank? ? nil : ActiveSupport::TimeZone[self.pref.time_zone])
   end
   
   def wants_comments_in_reverse_order?
@@ -175,8 +175,19 @@ class User < ActiveRecord::Base
   end
   
   def self.find_by_autologin_key(key)
-    token = Token.find_by_action_and_value('autologin', key)
-    token && (token.created_on > Setting.autologin.to_i.day.ago) && token.user.active? ? token.user : nil
+    tokens = Token.find_all_by_action_and_value('autologin', key)
+    # Make sure there's only 1 token that matches the key
+    if tokens.size == 1
+      token = tokens.first
+      if (token.created_on > Setting.autologin.to_i.day.ago) && token.user && token.user.active?
+        token.user
+      end
+    end
+  end
+  
+  # Makes find_by_mail case-insensitive
+  def self.find_by_mail(mail)
+    find(:first, :conditions => ["LOWER(mail) = ?", mail.to_s.downcase])
   end
 
   # Sort users by their display names
